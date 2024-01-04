@@ -7,11 +7,8 @@ LENGTH_HEADER="Content-Length"
 TYPE_HEADER="Content-Type"
 DISPOSITION_HEADER="Content-Disposition"
 
-DROPFILE="image.png"
-MIME="image/png"
-
 PORTS_RANGE_START=8080
-PORTS_RANGE_END=8080
+PORTS_RANGE_END=8100
 
 function check {
 	if [ $# -ne 1 ]; then
@@ -30,10 +27,25 @@ function check {
 	fi
 
 	export DROPFILE=$1
-	export MIME="plain/text"
+	export MIME=$(file --mime $1 | cut -d : -f 2 | tr -d ' ')
 }
 
+function read_config {
+	if [ ! -r $1 ]; then
+		return
+	fi
+	
+	. $1
+	
+	if [ -n $PORTS_RANGE_START ]; then export PORTS_RANGE_START=$PORTS_RANGE_START; fi
+	if [ -n $PORTS_RANGE_END ]; then export PORTS_RANGE_END=$PORTS_RANGE_END; fi
+	if [ -n $USE_FILENAME_URL ]; then export USE_FILENAME_URL=$USE_FILENAME_URL; fi
+	if [ -n $USE_QR ]; then export USE_QR=$USE_QR; fi
+}
+
+
 function serve {
+	file_name=$(basename $DROPFILE)
 	file_content=$(cat $DROPFILE)
 	content_length=$(wc -c < $DROPFILE | tr -d ' ')
 
@@ -41,21 +53,28 @@ function serve {
 	port=$((RANDOM % ($PORTS_RANGE_END - $PORTS_RANGE_START + 1) + $PORTS_RANGE_START))
 	url="http://$machine_ip:$port"
 
+	if [ $USE_FILENAME_URL -eq 1 ]; then
+		url="$url/$file_name"
+	fi
+
 	# serving
 	echo "Sending file on $url..." 
-	qrencode -t UTF8 $url
+
+	if [ $USE_QR -eq 1 ]; then
+		qrencode -t UTF8 $url
+	fi
 
 	{
 		echo -ne "$HTTP $STATUS_OK$NL"
 		echo -ne "$LENGTH_HEADER: $content_length$NL"
 		echo -ne "$TYPE_HEADER: $MIME$NL"
-		echo -ne "$DISPOSITION_HEADER: attachment; filename=\"$DROPFILE\""
+		echo -ne "$DISPOSITION_HEADER: attachment; filename=\"$file_name\""
 		echo -ne "$NL$NL"
 		cat $DROPFILE
 	} | nc -l $port > /dev/null
-
-	#echo -ne "$HTTP $STATUS_OK$NL$HEADERS$NL$NL$file_content" | nc -l 8080
 }
 
 check $@
+read_config /etc/shelldrop/config
+read_config ~/.config/shelldrop/config
 serve
