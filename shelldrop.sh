@@ -43,6 +43,16 @@ function read_config {
 	if [ -n $USE_QR ]; then export USE_QR=$USE_QR; fi
 }
 
+function get_port {
+	port=$((RANDOM % ($PORTS_RANGE_END - $PORTS_RANGE_START + 1) + $PORTS_RANGE_START))
+
+	if [ -z "$(netstat -an | grep "LISTEN" | grep "*.$port")" ]; then
+		echo $port;
+	else
+		echo $(get_port)
+	fi
+}
+
 
 function serve {
 	file_name=$(basename $DROPFILE)
@@ -77,4 +87,8 @@ function serve {
 check $@
 read_config /etc/shelldrop/config
 read_config ~/.config/shelldrop/config
-serve
+#serve
+
+port=$(get_port)
+
+echo $port
